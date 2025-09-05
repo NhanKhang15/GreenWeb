@@ -1,23 +1,19 @@
-from database_Connection.db_connection import DatabaseConnection
+from Backend_GreenWeb.database_Connection.db_connection_mysql import DatabaseConnection
 import bcrypt
 import base64
 
 def update_user_password(username, new_password):
     # Hash mật khẩu mới
     hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
-    hashed_str = base64.b64encode(hashed).decode('utf-8')
-    
+    hashed_str = base64.b64encode(hashed).decode('utf-8') 
     db = DatabaseConnection()
-    if not db.connect():
-        print("❌ Không thể kết nối database")
-        return False
-    
+
     try:
         # Cập nhật mật khẩu
         update_query = """
         UPDATE Users 
-        SET Password = ?, PasswordHashed = ? 
-        WHERE UserName = ?
+        SET Password = %s, PasswordHashed = %s 
+        WHERE UserName = %s
         """
         db.cursor.execute(update_query, (new_password, hashed_str, username))
         db.conn.commit()
@@ -28,7 +24,3 @@ def update_user_password(username, new_password):
         return False
     finally:
         db.close()
-
-if __name__ == "__main__":
-    # Cập nhật mật khẩu cho user admin
-    update_user_password("admin", "1234567") 

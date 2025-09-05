@@ -7,7 +7,7 @@ import Hero     from './components/hero/Hero'
 import ListProd from './components/listProduct/listProduct'
 import Clip     from './components/clip/Clips'
 import Footer   from './components/footer/Footer'
-import Banner   from './components/Banner/Banner'
+import Product from './components/after/Product'
 
 export default function App() {
   return (
@@ -17,8 +17,8 @@ export default function App() {
         <Route path="/login"  element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
 
-        {/* Route riêng cho Banner */}
-        <Route path="/banner" element={<Banner />} />
+        {/* Route riêng cho Product */}
+        <Route path="/product" element={<Product />} />
 
         {/* Homepage với full layout */}
         <Route path="/" element={

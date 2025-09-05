@@ -1,89 +1,86 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import sys
-import os
+from flask import Blueprint, request, jsonify
 import bcrypt
 import base64
+from database_Connection.db_connection_mysql import DatabaseConnection
 
-# Add the parent directory to Python path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(os.path.dirname(current_dir))
-sys.path.append(parent_dir)
 
-from database_Connection.db_connection import DatabaseConnection
+login_bp = Blueprint('login', __name__)
 
-app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+def hash_password(password: str) -> str:
+    # Trả về chuỗi '$2b$...'
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
-def verify_password(password, hashed_password_str):
-    """Verify a password against a hashed password stored as base64 string"""
+def verify_password(password: str, stored_hash: str) -> bool:
+    """
+    Hỗ trợ cả 2 kiểu:
+    1) Chuỗi bcrypt gốc: '$2a$' | '$2b$' | '$2y$'
+    2) (Fallback) Chuỗi base64-encode của bcrypt bytes (nếu từng lỡ lưu kiểu này)
+    """
     try:
-        hashed_bytes = base64.b64decode(hashed_password_str.encode('utf-8'))
-        return bcrypt.checkpw(password.encode('utf-8'), hashed_bytes)
-    except Exception as e:
-        print(f"❌ Lỗi verify password: {str(e)}")
-        return False
+        # Case 1: bcrypt gốc
+        if stored_hash.startswith(('$2a$', '$2b$', '$2y$')):
+            return bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8'))
 
-@app.route('/api/login', methods=['POST'])
+        # Case 2: thử decode base64 (cho dữ liệu cũ nếu có)
+        try:
+            decoded = base64.b64decode(stored_hash.encode('utf-8'), validate=True)
+            return bcrypt.checkpw(password.encode('utf-8'), decoded)
+        except Exception:
+            # Không decode được → không đúng định dạng hash hợp lệ
+            return False
+    except Exception as e:
+        print(f"❌ Lỗi verify password: {e}")
+        return False
+    
+@login_bp.route('/login', methods=['POST'])
 def login():
     try:
         data = request.get_json()
         username = data.get('username')
         password = data.get('password')
-
         if not username or not password:
             return jsonify({
                 'success': False,
                 'message': 'Username and password are required'
             }), 400
-
-        # Kết nối database
         db = DatabaseConnection()
         if not db.connect():
             return jsonify({
                 'success': False,
                 'message': 'Database connection error'
             }), 500
-
         try:
-            # Tìm user trong database
-            select_query = "SELECT UserID, UserName, Email, PasswordHashed FROM Users WHERE UserName = ?"
+            select_query = "SELECT UserID, UserName, Email, PasswordHashed FROM Users WHERE UserName = %s"
             db.cursor.execute(select_query, (username,))
             user = db.cursor.fetchone()
-
             if not user:
                 return jsonify({
                     'success': False,
                     'message': 'Invalid username or password'
                 }), 401
-
-            # Lấy thông tin user
-            user_id, username, email, hashed_password = user
-
+            user_id = user['UserID']
+            username_db = user['UserName']
+            email = user['Email']
+            hashed_password = user['PasswordHashed']
             if not hashed_password:
                 return jsonify({
                     'success': False,
                     'message': 'Account needs to be updated. Please contact administrator.'
                 }), 401
-
-            # Verify password với bcrypt
             if not verify_password(password, hashed_password):
                 return jsonify({
                     'success': False,
                     'message': 'Invalid username or password'
                 }), 401
-
-            # Đăng nhập thành công
             return jsonify({
                 'success': True,
                 'message': 'Login successful',
                 'user': {
                     'id': user_id,
-                    'username': username,
+                    'username': username_db,
                     'email': email
                 }
             })
-
         except Exception as e:
             print(f"❌ Lỗi khi xử lý đăng nhập: {str(e)}")
             return jsonify({
@@ -92,15 +89,9 @@ def login():
             }), 500
         finally:
             db.close()
-
     except Exception as e:
         print(f"❌ Lỗi: {str(e)}")
         return jsonify({
             'success': False,
             'message': 'An error occurred'
-        }), 500
-
-if __name__ == '__main__':
-    print("🚀 Server đang chạy tại http://localhost:8000")
-    print("📝 Endpoint: POST /api/login - Đăng nhập")
-    app.run(port=8000, debug=True)
+        }), 500 

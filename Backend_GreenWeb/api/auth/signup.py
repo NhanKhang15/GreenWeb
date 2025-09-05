@@ -1,19 +1,11 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import sys
-import os
+from flask import Blueprint, request, jsonify
+import bcrypt
+import base64
+from database_Connection.db_connection_mysql import DatabaseConnection
 
-# Add the root directory to Python path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
-sys.path.append(root_dir)
+signup_bp = Blueprint('signup', __name__)
 
-from Backend_GreenWeb.database_Connection.db_connection import DatabaseConnection
-
-app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
-
-@app.route('/api/signup', methods=['POST'])
+@signup_bp.route('/signup', methods=['POST'])
 def signup():
     try:
         data = request.get_json()
@@ -27,23 +19,49 @@ def signup():
                 'message': 'Missing required fields'
             }), 400
 
+        hashed_password = hash_password(password)
         db = DatabaseConnection()
-        if db.save_user(username, email, password):
+        if not db.connect():
+            return jsonify({
+                'success': False,
+                'message': 'Database connection error'
+            }), 500
+        try:
+            check_query = "SELECT UserID FROM Users WHERE UserName = %s"
+            db.cursor.execute(check_query, (username,))
+            if db.cursor.fetchone():
+                return jsonify({
+                    'success': False,
+                    'message': 'Username already exists'
+                }), 400
+            check_email_query = "SELECT UserID FROM Users WHERE Email = %s"
+            db.cursor.execute(check_email_query, (email,))
+            if db.cursor.fetchone():
+                return jsonify({
+                    'success': False,
+                    'message': 'Email already exists'
+                }), 400
+            insert_query = """
+            INSERT INTO Users (UserName, Email, Password, PasswordHashed) 
+            VALUES (%s, %s, %s, %s)
+            """
+            db.cursor.execute(insert_query, (username, email, password, hashed_password))
+            db.conn.commit()
             return jsonify({
                 'success': True,
                 'message': 'User registered successfully'
             })
-        else:
+        except Exception as e:
+            print(f"❌ Lỗi khi lưu user: {str(e)}")
             return jsonify({
                 'success': False,
                 'message': 'Failed to register user'
             }), 500
-
+        finally:
+            db.close()
     except Exception as e:
+        print(f"❌ Lỗi đăng ký: {str(e)}")
         return jsonify({
             'success': False,
             'message': str(e)
         }), 500
-
-if __name__ == '__main__':
-    app.run(port=8000, debug=True) 

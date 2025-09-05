@@ -29,7 +29,7 @@ const Login = () => {
         setMsg('Đăng nhập thành công!');
         // Chuyển hướng sau 1 giây để người dùng thấy thông báo thành công
         setTimeout(() => {
-          navigate('/Banner');
+          navigate('/product');
         }, 1000);
       } else {
         setMsg(data.message || 'Đăng nhập thất bại');
